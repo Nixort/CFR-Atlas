@@ -1,0 +1,50 @@
+# Copyright Nixort & Itan Winter <https://github.com/Nixort/CFR-Atlas> 2026.
+#
+# License: MIT
+# You can find the license file in the project root.
+#
+# CFR-Atlas
+# The code was written for CFR-Atlas.
+# 9 july 2026
+#
+# Cargo package metadata for the CFR-Atlas Rust crate.
+
+[package]
+name = "cfr-atlas"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT"
+description = "CFR-Atlas: exact CPU memory-virtualized KV attention with deterministic regeneration"
+readme = "README.md"
+keywords = ["llm", "attention", "kv-cache", "cpu", "inference"]
+categories = ["algorithms", "science"]
+
+[lib]
+name = "cfr_atlas"
+path = "src/lib.rs"
+
+[features]
+default = []
+
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+[workspace]
+members = ["crates/cfr-atlas-backend-ref"]
+exclude = ["fuzz"]
+resolver = "2"
+
+[dev-dependencies]
+cfr-atlas-backend-ref = { path = "crates/cfr-atlas-backend-ref" }

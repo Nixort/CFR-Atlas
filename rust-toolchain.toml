@@ -1,0 +1,16 @@
+# Copyright Nixort & Itan Winter <https://github.com/Nixort/CFR-Atlas> 2026.
+#
+# License: MIT
+# You can find the license file in the project root.
+#
+# CFR-Atlas
+# The code was written for CFR-Atlas.
+# 6 july 2026
+#
+# Pinned Rust toolchain channel for CFR-Atlas development.
+
+# CFR-Atlas
+# The crate targets stable Rust and keeps the core dependency-light.
+[toolchain]
+channel = "1.75.0"
+components = ["rustfmt", "clippy"]

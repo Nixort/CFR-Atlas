@@ -1,0 +1,33 @@
+# Copyright Nixort & Itan Winter <https://github.com/Nixort/CFR-Atlas> 2026.
+#
+# License: MIT
+# You can find the license file in the project root.
+#
+# CFR-Atlas
+# The code was written for CFR-Atlas.
+# 9 july 2026
+#
+# Reference backend adapter package for CFR-Atlas Phase 2.
+
+[package]
+name = "cfr-atlas-backend-ref"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT"
+description = "Reference CFR-Atlas backend adapter for Phase 2 conformance tests"
+
+[dependencies]
+cfr-atlas = { path = "../.." }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"

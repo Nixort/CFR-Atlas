@@ -1,0 +1,38 @@
+# Copyright Nixort & Itan Winter <https://github.com/Nixort/CFR-Atlas> 2026.
+#
+# License: MIT
+# You can find the license file in the project root.
+#
+# CFR-Atlas
+# The code was written for CFR-Atlas.
+# 9 july 2026
+#
+# Continuous integration workflow for CFR-Atlas.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.75.0", "stable"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --release
+      - run: cargo run --release --example toy_cpu
+      - run: cargo run --release --example bench_cfr -- 32768 64 512
+      - run: cargo run --release --example reference_backend
+      - run: cargo run --release --example bench_matrix
+      - run: cargo run --release --example long_context_validation
+      - run: cargo run --release --example stabilization_report

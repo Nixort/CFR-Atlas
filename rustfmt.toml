@@ -1,0 +1,14 @@
+# Copyright Nixort & Itan Winter <https://github.com/Nixort/CFR-Atlas> 2026.
+#
+# License: MIT
+# You can find the license file in the project root.
+#
+# CFR-Atlas
+# The code was written for CFR-Atlas.
+# 5 july 2026
+#
+# Rust formatting rules for CFR-Atlas source files.
+
+edition = "2021"
+max_width = 100
+newline_style = "Unix"

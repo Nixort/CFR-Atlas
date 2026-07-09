@@ -1,0 +1,24 @@
+# Copyright Nixort & Itan Winter <https://github.com/Nixort/CFR-Atlas> 2026.
+#
+# License: MIT
+# You can find the license file in the project root.
+#
+# CFR-Atlas
+# The code was written for CFR-Atlas.
+# 5 july 2026
+#
+# Ignored local build artifacts for CFR-Atlas.
+
+/target/
+Cargo.lock
+*.profraw
+*.profdata
+**/*.rs.bk
+Cargo.lock.orig
+.DS_Store
+.idea/
+.vscode/
+*.log
+*.tmp
+fuzz/artifacts/
+fuzz/corpus/

@@ -1,0 +1,30 @@
+# Copyright Nixort & Itan Winter <https://github.com/Nixort/CFR-Atlas> 2026.
+#
+# License: MIT
+# You can find the license file in the project root.
+#
+# CFR-Atlas
+# The code was written for CFR-Atlas.
+# 9 july 2026
+#
+# Cargo-fuzz package for Phase 1 validation targets.
+
+[package]
+name = "cfr-atlas-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+cfr-atlas = { path = ".." }
+libfuzzer-sys = "0.4"
+
+[[bin]]
+name = "config_page_validation"
+path = "targets/config_page_validation.rs"
+test = false
+doc = false
+bench = false
