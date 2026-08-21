@@ -1,0 +1,4 @@
+method,median_ms,min_ms,max_ms,contexts_per_second,full_kv_bytes,resident_kv_bytes,resident_memory_reduction_x,speed_ratio_vs_full_kv,hot_hits_per_run,cold_regenerations_per_run,max_abs_diff
+full_kv,86.658672,85.253695,91.819986,11.539526,33554432,33554432,1.00,1.000,0,0,0.000000000e0
+cfr_cold,85.230528,84.203422,86.592864,11.732885,33554432,262144,128.00,1.017,0,128,0.000000000e0
+cfr_hot,81.555989,78.154222,83.851574,12.261515,33554432,2621440,12.80,1.063,9,119,0.000000000e0

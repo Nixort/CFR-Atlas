@@ -1,0 +1,4 @@
+method,source,context_tokens,head_dim,page_tokens,hot_cache_bytes,recent_tokens,runs,median_ms,min_ms,max_ms,contexts_per_second,full_kv_bytes,cfr_resident_kv_bytes,hot_hits_per_run,cold_regenerations_per_run,max_abs_diff
+full_kv,tinyshakespeare,65536,64,512,8388608,4096,5,86.658672,85.253695,91.819986,11.539526,33554432,33554432,0,0,0.000000000e0
+cfr_cold,tinyshakespeare,65536,64,512,8388608,4096,5,85.230528,84.203422,86.592864,11.732885,33554432,262144,0,128,0.000000000e0
+cfr_hot,tinyshakespeare,65536,64,512,8388608,4096,5,81.555989,78.154222,83.851574,12.261515,33554432,2621440,9,119,0.000000000e0

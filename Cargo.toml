@@ -26,6 +26,10 @@ categories = ["algorithms", "science"]
 name = "cfr_atlas"
 path = "src/lib.rs"
 
+[[bin]]
+name = "bench-cfr"
+path = "bench/bench_cfr.rs"
+
 [features]
 default = []
 

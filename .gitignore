@@ -22,3 +22,6 @@ Cargo.lock.orig
 *.tmp
 fuzz/artifacts/
 fuzz/corpus/
+
+# Downloaded public corpora used by local benchmarks.
+bench/data/
