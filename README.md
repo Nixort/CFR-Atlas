@@ -35,6 +35,7 @@ Correctness therefore depends on the adapter. A production backend must replay t
 |---|---|
 | `src/` | Dependency-light runtime, page/cache logic, folded attention, policies and validation types |
 | `crates/cfr-atlas-backend-ref/` | Deterministic reference adapter used to exercise production integration seams |
+| `crates/cfr-atlas-ollama/` | Optional typed public-Ollama integration; model discovery, generation and embeddings with exact K/V explicitly disabled |
 | `tests/` | Exactness, cache invariants, topology, validation, performance-surface and stabilization tests |
 | `examples/` | Minimal CPU integration, reference adapter, long-context validation and benchmark helpers |
 | `docs/` | Architecture, adapter, math, claims, benchmark and release-facing guides |
@@ -43,7 +44,7 @@ Correctness therefore depends on the adapter. A production backend must replay t
 
 ## Quick start
 
-CFR-Atlas targets Rust `1.75.0` or newer. The normal workspace has no external runtime dependencies.
+CFR-Atlas targets Rust `1.75.0` or newer. The core crate has no external runtime dependencies; optional integration crates keep their own dependencies isolated from the core.
 
 ```sh
 cargo fmt --all -- --check
@@ -125,6 +126,7 @@ The included examples report deterministic resident-KV estimates and exercise th
 |---|---|
 | Understand the runtime and memory model | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | Implement a model adapter | [`docs/ADAPTERS.md`](docs/ADAPTERS.md) |
+| Use supported public Ollama operations | [`docs/OLLAMA.md`](docs/OLLAMA.md) |
 | Review folded-softmax math | [`docs/MATH.md`](docs/MATH.md) |
 | Validate and falsify integration claims | [`docs/CLAIMS.md`](docs/CLAIMS.md) |
 | Reproduce benchmark and tuning results | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) |
@@ -133,7 +135,7 @@ The included examples report deterministic resident-KV estimates and exercise th
 
 ## Status
 
-CFR-Atlas is a release-candidate-quality exact-attention core with a deterministic reference adapter. A stable deployment should still require conformance and long-context validation against the target model backend, its tokenizer/position policy, its storage dtype, and its serving loop.
+CFR-Atlas is a release-candidate-quality exact-attention core with a deterministic reference adapter. The optional Ollama crate supports public model discovery, generation and embeddings, but does not claim exact K/V access through the standard Ollama API. A stable virtual-K/V deployment should still require conformance and long-context validation against the target model backend, its tokenizer/position policy, its storage dtype, and its serving loop.
 
 ## License
 

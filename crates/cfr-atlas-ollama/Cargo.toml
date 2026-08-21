@@ -1,0 +1,32 @@
+# Copyright Nixort <https://github.com/Nixort/CFR-Atlas> 2026.
+#
+# License: MIT
+# Ollama capability and API integration for CFR-Atlas.
+
+[package]
+name = "cfr-atlas-ollama"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT"
+description = "Fail-closed Ollama model discovery and API integration for CFR-Atlas"
+repository = "https://github.com/Nixort/CFR-Atlas"
+keywords = ["ollama", "llm", "kv-cache", "attention"]
+categories = ["api-bindings", "science"]
+
+[dependencies]
+cfr-atlas = { path = "../.." }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"

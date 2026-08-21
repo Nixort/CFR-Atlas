@@ -48,7 +48,7 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
 [workspace]
-members = ["crates/cfr-atlas-backend-ref"]
+members = ["crates/cfr-atlas-backend-ref", "crates/cfr-atlas-ollama"]
 exclude = ["fuzz"]
 resolver = "2"
 

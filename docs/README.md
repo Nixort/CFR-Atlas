@@ -9,6 +9,7 @@ CFR-Atlas is an exact-attention memory-virtualization layer. This directory sepa
 | Decide whether CFR fits the runtime | [`../README.md`](../README.md) and [`CLAIMS.md`](CLAIMS.md) | Understand the exactness contract, non-goals and production boundary |
 | Understand page execution and resident memory | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Map the runtime, cache, scratch lifecycle and folded attention data flow |
 | Write a backend adapter | [`ADAPTERS.md`](ADAPTERS.md) | Implement exact K/V replay and complete conformance before enabling CFR |
+| Connect to public Ollama APIs | [`OLLAMA.md`](OLLAMA.md) | Discover models and use supported wrappers while preserving the exact-K/V fail-closed boundary |
 | Review numerical behavior | [`MATH.md`](MATH.md) | Follow online-softmax folding, exactness assumptions and memory accounting |
 | Run or interpret measurements | [`BENCHMARKS.md`](BENCHMARKS.md) | Reproduce the reference workload and avoid unsupported throughput claims |
 | Review release readiness | [`STABILIZATION.md`](STABILIZATION.md) | Check API, MSRV, schema, supply-chain and hardening posture |

@@ -55,6 +55,12 @@ Do not enable CFR for a model family after only compiling an adapter. First demo
 
 The in-repository `cfr-atlas-backend-ref` crate is a deterministic conformance fixture. It is not a language model or a performance proxy for a production backend.
 
+## Ollama public API boundary
+
+The optional `cfr-atlas-ollama` crate is a typed integration for public Ollama model discovery, non-streaming generation and embeddings. It intentionally does **not** implement `KvRegenerator`: the supported public endpoints do not provide the per-layer K/V rows, token-position trace or historical page replay needed to satisfy this contract. `OllamaClient::require_exact_kv_access()` therefore fails closed with `ExactKvAccessUnavailable`.
+
+Use [`OLLAMA.md`](OLLAMA.md) to discover models and record available topology metadata. Do not treat that metadata, a generation response, or an embedding as page conformance. A future sidecar or native extension may become an adapter only after it exposes the complete replay surface above and passes this document's conformance gate.
+
 ## Preserve these semantics
 
 A typical real backend must replay more than token ids. Its adapter should make the following inputs explicit and testable:
