@@ -22,6 +22,12 @@ use std::ops::Range;
 /// layout is row-major: `[token][head_dim]` for both K and V.
 pub trait KvRegenerator {
     /// Regenerates one page of keys and values.
+    ///
+    /// Implementations must overwrite every element of `k_out` and `v_out` on
+    /// success. Each slice has exactly `token_range.len() * head_dim` elements
+    /// and uses row-major `[token][head_dim]` layout. Callers may reuse scratch
+    /// allocation between pages, so an implementation must not rely on the
+    /// output slices having been zeroed beforehand.
     fn regenerate_page(
         &self,
         key: PageKey,

@@ -9,7 +9,7 @@
 
 //! Double-buffered cold-page regeneration pipeline.
 
-use crate::layout::{checked_matrix_len, checked_range_len, prepare_zeroed, wipe_f32};
+use crate::layout::{checked_matrix_len, checked_range_len, wipe_f32};
 use crate::{KvRegenerator, PageKey, Result};
 use std::ops::Range;
 
@@ -75,8 +75,7 @@ impl ColdPageBuffer {
     ) -> Result<()> {
         let tokens = checked_range_len("cold-page pipeline range", &token_range)?;
         let len = checked_matrix_len("cold-page pipeline matrix", tokens, head_dim)?;
-        prepare_zeroed(&mut self.k, len);
-        prepare_zeroed(&mut self.v, len);
+        self.ensure_capacity(len);
         if let Err(err) = regenerator.regenerate_page(
             key,
             token_range.clone(),
@@ -91,6 +90,15 @@ impl ColdPageBuffer {
         self.token_range = token_range;
         self.tokens = tokens;
         Ok(())
+    }
+
+    fn ensure_capacity(&mut self, len: usize) {
+        if self.k.len() < len {
+            self.k.resize(len, 0.0);
+        }
+        if self.v.len() < len {
+            self.v.resize(len, 0.0);
+        }
     }
 
     fn clear(&mut self) {

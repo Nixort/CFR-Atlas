@@ -129,6 +129,47 @@ fn cfr_matches_baseline_without_hot_cache() -> Result<()> {
 }
 
 #[test]
+fn cfr_reuses_scratch_without_pre_zeroing() -> Result<()> {
+    let head_dim = 16;
+    let context_tokens = 97;
+    let config = Config::builder(32, head_dim)
+        .hot_cache_bytes(0)
+        .wipe_scratch_after_use(false)
+        .build()?;
+    let regenerator = ToyRegenerator;
+    let query: Vec<f32> = (0..head_dim)
+        .map(|index| {
+            let index = usize_to_f32_checked("test query index must fit exact f32", index)?;
+            Ok((index * 0.029).sin())
+        })
+        .collect::<Result<_>>()?;
+    let expected = baseline_attention(
+        &regenerator,
+        1,
+        0,
+        &query,
+        context_tokens,
+        head_dim,
+        config.scale,
+    )?;
+
+    let mut atlas = CfrAtlas::new(config)?;
+    for _ in 0..2 {
+        let mut actual = vec![0.0; head_dim];
+        atlas.attend_exact(
+            &regenerator,
+            AttentionRequest::new(1, 0, &query, context_tokens),
+            &mut actual,
+        )?;
+        for (actual, expected) in actual.iter().zip(&expected) {
+            assert!((actual - expected).abs() <= 1e-6);
+        }
+    }
+    assert_eq!(atlas.stats().cold_regenerations, 8);
+    Ok(())
+}
+
+#[test]
 fn cfr_uses_bounded_hot_cache() -> Result<()> {
     let head_dim = 16;
     let page_tokens = 32;
