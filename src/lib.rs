@@ -7,10 +7,7 @@
 // The code was written for CFR-Atlas.
 // 9 july 2026
 
-//! `CFR-Atlas` public crate root and production integration surface.
-//!
-//! This file exposes the safe Rust `API` used by runtimes that want exact
-//! `CPU`-first `KV` memory virtualization through deterministic regeneration.
+#![doc = include_str!("../README.md")]
 
 mod atlas;
 mod attention;

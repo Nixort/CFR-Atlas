@@ -1,60 +1,57 @@
-<!--
-Copyright Nixort & Itan Winter <https://github.com/Nixort/CFR-Atlas> 2026.
+# Claims and validation boundary
 
-License: MIT
-You can find the license file in the project root.
+This document states what CFR-Atlas claims, the conditions required for each claim, and the observations that invalidate it for a particular backend integration. It is intentionally narrower than a product-performance statement.
 
-CFR-Atlas
-The documentation was written for CFR-Atlas.
-9 july 2026
+## Exact-attention claim
 
-Exactness and memory-accounting claims packet.
--->
+For a fixed layer, K/V head, query vector and causal context, CFR-Atlas produces the same attention result as a conventional full-KV path **when** the following conditions hold.
 
-# CFR-Atlas Claims Packet
+| Condition | Why it is required |
+|---|---|
+| `KvRegenerator` returns the baseline K and V rows | Regeneration replaces residency; it cannot replace source-of-truth values |
+| Page ranges and row order match the causal context | Online folding is sensitive to the ordered token stream |
+| Head mapping matches baseline MHA/MQA/GQA behavior | The requested page must belong to the same K/V head |
+| Position and dtype policy are replayed identically | RoPE, ALiBi and rounding can change values before attention |
+| Attention scale and finite-input policy match | The reducer assumes the same numerical contract as the baseline |
+| Accumulation/projection tolerance is stated | Different floating-point execution order may require an explicit tolerance |
 
-This document lists the claims that should be reviewed by external integrators.
-It is intentionally conservative.
+The included deterministic reference backend reaches `max_abs_diff = 0` in covered validation paths. That result is evidence for the reference fixture, not a blanket guarantee for an untested model runtime.
 
-## Exactness claim
+## Resident-memory claim
 
-For a fixed layer, K/V head, query vector and causal context, CFR-Atlas produces
-attention output equal to a full-KV baseline when all of the following hold:
+CFR-Atlas bounds **its resident K/V contribution** through the configured hot-cache budget, scratch-page capacity and metadata. It can reduce the always-resident K/V footprint compared with retaining every historical K/V page at once.
 
-- `KvRegenerator` returns the exact K and V rows that the baseline cache would
-  have stored;
-- row order and token ranges match the causal context;
-- positional encoding, dtype rounding and head mapping are replayed exactly;
-- the same attention scale and finite input values are used;
-- any numerical drift is bounded by the selected accumulator and projection
-  policy.
+This is not a promise about total process RSS. Model weights, allocator arenas, thread stacks, executable code, backend activations, external caches, sanitizers and operating-system behavior remain outside CFR-Atlas page accounting. Benchmark reports must distinguish resident-KV estimates from measured whole-process memory.
 
-The core tests cover deterministic exactness, non-finite rejection, stale partial
-hot pages, transactional folded attention, adapter conformance and Phase 4
-logit-level validation.
+## What CFR-Atlas does not claim
 
-## Memory-accounting claim
+CFR-Atlas does not claim end-to-end LLM throughput, latency, token/s, quality, or RSS improvement for an unspecified model/runtime/hardware configuration. It does not claim that arbitrary adapters can replay K/V exactly, or that a residency policy can repair a conformance mismatch.
 
-CFR-Atlas reduces resident K/V memory by replacing always-resident full-KV rows
-with a scratch page plus optional hot pages. The reported memory reduction is a
-resident-memory estimate, not a total process RSS guarantee. Process RSS can be
-higher due to allocator behavior, executable code, model weights, thread stacks,
-ASAN shadow memory or external backend buffers.
+## Falsification criteria
 
-## What would falsify these claims
+Reject the exactness claim for a backend configuration if any of the following is observed:
 
-An integration should reject the claim for a backend if any of these happen:
+- regenerated K/V differs from stored baseline K/V outside the declared tolerance;
+- query-to-K/V head mapping differs between baseline and CFR paths;
+- RoPE, ALiBi, token positions or dtype rounding are applied on only one path;
+- cache admission, eviction or page scheduling changes output values;
+- a partial final page is replayed with a different token range or layout;
+- non-finite K/V values enter the hot cache rather than being rejected;
+- a benchmark reports resident-memory savings while including reachable K/V pages outside the accounting scope.
 
-- regenerated K/V differs from stored baseline K/V outside tolerance;
-- query-to-K/V head mapping differs between baseline and CFR path;
-- RoPE, ALiBi or dtype policy is applied in only one path;
-- cache admission changes output values rather than only latency and residency;
-- resident-byte accounting excludes a page that remains reachable;
-- non-finite K/V values enter hot cache instead of being rejected before admission;
-- duplicate config-schema fields silently override earlier values.
+Reject the memory-accounting claim if a reachable resident page is omitted from byte accounting, a cache-budget violation is observed, or a report presents an estimate as process RSS without measuring that RSS.
 
-## External review status
+## Evidence shipped in this repository
 
-The crate ships a review packet and deterministic validation harness. A real
-model backend still needs an external review run over its own weights, tokenizer,
-position policy, dtype policy and serving loop.
+| Evidence | Scope |
+|---|---|
+| `tests/exactness.rs` | Deterministic full-KV versus CFR output equality and cache behavior |
+| `crates/cfr-atlas-backend-ref/` | Reference adapter topology, position, dtype and page-conformance checks |
+| `tests/long_context_validation.rs` | Output/logit comparison and memory telemetry on the reference fixture |
+| `tests/property_invariants.rs` | Checked layout, page-range and cache-accounting properties |
+| `docs/BENCHMARKS.md` | Measurement scope, reproducibility rules and interpretation limits |
+| `SECURITY.md` | Threat model and hardening baseline |
+
+## External review requirement
+
+A production model integration remains unreviewed until its own stored-KV/replayed-KV conformance, output/logit validation, supported-mode matrix, and benchmark environment have been examined. The reference backend and these documents make that review repeatable; they do not substitute for it.

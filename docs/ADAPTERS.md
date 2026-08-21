@@ -1,40 +1,22 @@
-<!--
-Copyright Nixort & Itan Winter <https://github.com/Nixort/CFR-Atlas> 2026.
+# Backend adapters
 
-License: MIT
-You can find the license file in the project root.
+A CFR-Atlas adapter connects virtual K/V pages to one concrete model runtime. The core can make memory residency explicit; only the adapter can establish that a regenerated page is the same page the runtime would otherwise have retained in its full K/V cache.
 
-CFR-Atlas
-The documentation was written for CFR-Atlas.
-9 july 2026
+## Responsibility split
 
-Backend adapter guide for CFR-Atlas Phase 2.
--->
+| CFR-Atlas provides | A backend adapter must provide |
+|---|---|
+| Page identity, ranges, scratch storage and cache residency | Access to token history and absolute positions |
+| Folded exact-attention reduction | Model-specific K/V replay for `(layer, K/V head, token range)` |
+| MHA/MQA/GQA, dtype and position policy types | Correct topology, RoPE/ALiBi and storage-rounding semantics |
+| Page-level conformance utilities | Comparison against the runtime's conventional stored-KV path |
+| Output/logit validation harness | A model-head projection for production logit validation |
 
-# Backend Adapters
-
-Phase 2 defines the production boundary for crates named
-`cfr-atlas-backend-*`. The first implementation is
-`crates/cfr-atlas-backend-ref`, a deterministic reference backend used for
-conformance tests and examples.
-
-## Boundary
-
-A backend adapter owns model-specific replay:
-
-- token ledger access;
-- layer and head validation;
-- MHA, MQA or GQA mapping;
-- RoPE, ALiBi or backend-specific positional behavior;
-- dtype storage policy for `f32`, `bf16` or `f16` paths;
-- comparison against the backend's classic stored-KV path.
-
-The core crate still owns only virtual pages, hot-cache residency and folded
-attention. It does not own model weights, tokenizer state or matmul kernels.
+The core does not own weights, tokenization, transformer execution, graph compilation or optimized matrix kernels.
 
 ## Required contract
 
-A backend adapter implements:
+Implement `KvRegenerator` and fill the requested row-major page buffers:
 
 ```rust
 use cfr_atlas::prelude::*;
@@ -51,89 +33,65 @@ impl KvRegenerator for MyBackend {
         k_out: &mut [f32],
         v_out: &mut [f32],
     ) -> Result<()> {
+        // Replay the normal backend path for `key.layer`, `key.head` and
+        // `token_range`; write K[token][dim] and V[token][dim].
         let _ = (key, token_range, head_dim, k_out, v_out);
         Ok(())
     }
 }
 ```
 
-The output layout is always row-major:
+The adapter must treat `PageKey.head` as a **K/V head**. For MHA, MQA and GQA, derive that head through `AttentionTopology` before requesting or validating a page. A final page may be shorter than the configured page size and must still replay exactly.
 
-```text
-K[token][dim]
-V[token][dim]
-```
+## Enablement gate: page conformance
 
-## Phase 2 components
+Do not enable CFR for a model family after only compiling an adapter. First demonstrate that the backend's stored and regenerated K/V values agree under the exact production policy.
 
-| Component | API | Purpose |
-|---|---|---|
-| Token ledger | `TokenLedger`, `TokenRecord` | Replay token ids and absolute positions |
-| Head mapping | `AttentionTopology` | Map query heads to K/V heads for MHA, MQA and GQA |
-| Position policy | `PositionEncoding` | Preserve RoPE or ALiBi behavior at adapter boundary |
-| Dtype policy | `DTypePolicy` | Deterministic `f32`, `bf16` or `f16` storage rounding |
-| Conformance | `compare_regenerated_page` | Compare stored K/V with regenerated K/V |
-| Reference adapter | `cfr-atlas-backend-ref` | Small deterministic adapter crate |
+1. Run the normal stored-KV path for a short, deterministic context.
+2. Request the same range through `KvRegenerator`.
+3. Compare K and V with `compare_regenerated_page` or `assert_regenerated_page`.
+4. Repeat across layers, K/V heads, initial/middle/final pages, MHA/MQA/GQA topology, position policy and storage dtype.
+5. Treat any mismatch as an adapter bug or an unsupported mode, not as a cache-policy choice.
 
-## Reference backend
+The in-repository `cfr-atlas-backend-ref` crate is a deterministic conformance fixture. It is not a language model or a performance proxy for a production backend.
 
-The reference backend is not a real language model. It is a deterministic adapter
-that exercises the same integration seams a real backend must implement.
+## Preserve these semantics
 
-Run it with:
+A typical real backend must replay more than token ids. Its adapter should make the following inputs explicit and testable:
 
-```sh
-cargo test --workspace --release
-cargo run --release --example reference_backend
-```
+| Concern | Required behavior |
+|---|---|
+| Token history | Replay the same token ids and absolute positions used by the baseline |
+| Layer path | Reproduce the forward computation needed to reach the requested layer |
+| Head mapping | Preserve MHA/MQA/GQA query-to-K/V mapping |
+| Position policy | Apply RoPE, ALiBi or equivalent logic at the same point as the baseline |
+| Storage policy | Match `f32`, `bf16`, `f16` or other rounding behavior before attention consumes rows |
+| Causality | Return only the requested half-open causal range in its original order |
+| Numeric policy | State tolerance and accumulation assumptions when bit-exact ordering is not possible |
 
-Expected behavior:
+## From conformance to long-context validation
 
-- GQA query heads map to the correct K/V head;
-- RoPE modifies regenerated key rows deterministically;
-- dtype policy rounds K/V rows deterministically;
-- stored K/V and regenerated K/V pass conformance with `max_abs_diff = 0`;
-- CFR folded attention consumes the adapter through `KvRegenerator`.
+After page-level conformance passes, validate actual attention behavior before enabling a serving path.
 
-## Real backend checklist
+1. Build `PromptCase` inputs that represent the model's relevant workloads.
+2. Use `validate_decode_step` for targeted output/logit mismatches.
+3. Use `validate_decode_loop` across selected layers, heads, positions and long-context shapes.
+4. Record `MemoryTelemetry` with model identity, context length, page size, hot-cache budget, dtype and hardware information.
+5. Keep a regression corpus for every model/runtime combination that is released.
 
-A real adapter should provide one conformance test per model family:
+For a real model, provide an actual `LogitProjector`. `DeterministicLogitProjector` exists only for the reference fixture.
 
-1. Run the normal stored-KV path for a short context.
-2. Request the same page through `KvRegenerator`.
-3. Compare K and V with `assert_regenerated_page`.
-4. Repeat across layers, heads, final partial pages and positional settings.
-5. Only then run CFR folded attention against full-KV baseline logits.
+## Optional runtime controls
 
-## Phase 3 integration hooks
+After correctness is established, adapters may select `DotProductKernel`, tune page size with `PageSizeTuner`, reuse two cold-page buffers with `DoubleBufferedPipeline`, bound independent work with `ThreadPoolExecutor`, set per-layer cache budgets, or implement `TelemetryResidencyPolicy`. These controls may affect compute placement, locality, latency and resident bytes; they may not alter K/V content or output semantics.
 
-Backend crates can optionally use the performance helpers from the core crate:
+## Review checklist
 
-- `DotProductKernel` for selecting the folded-attention dot-product boundary;
-- `PageSizeTuner` for choosing page tokens from cache and scratch constraints;
-- `DoubleBufferedPipeline` for reusing two cold-page buffers during regeneration;
-- `ThreadPoolExecutor` for bounded batches of independent cold-page work;
-- `TelemetryResidencyPolicy` for cache-counter-aware admissions;
-- `HotCache::set_layer_budget` through `CfrAtlas::set_layer_hot_cache_bytes` for
-  per-layer residency caps.
+Before shipping an adapter, confirm all of the following:
 
-These hooks remain exactness-neutral. They affect scheduling, locality and
-resident memory only.
-
-## Phase 4 validation hooks
-
-After stored-KV conformance passes, adapters should run the logit-level
-validation harness before enabling CFR mode for a model family:
-
-1. Build a `PromptCase` or reuse one from `regression_corpus`.
-2. Convert it to a `TokenLedger` for the backend adapter.
-3. Provide a model-head implementation of `LogitProjector`.
-4. Run `validate_decode_step` for targeted debug checks.
-5. Run `validate_decode_loop` across sampled layers, GQA query heads and prompt
-   positions.
-6. Record `MemoryTelemetry` together with model name, context length, page size
-   and hot-cache budget.
-
-The in-repository example uses `DeterministicLogitProjector` because the
-reference backend is not a real model. Production adapters should replace it
-with their actual language-model head.
+- stored-KV versus regenerated-KV conformance passes under every supported topology/dtype/position configuration;
+- exactness or stated numerical tolerance is checked at attention output and, where possible, model logits;
+- resident-memory accounting is reported separately from process RSS;
+- unsupported execution modes fail closed instead of silently replaying a different policy;
+- cache admission and eviction are tested as performance controls only;
+- published benchmark reports name the model backend, runtime configuration, workload and validation status.

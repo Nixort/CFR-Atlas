@@ -1,81 +1,79 @@
-# CFR-Atlas
+# CFR-Atlas — exact KV attention virtualization for CPU inference
 
-CFR-Atlas is a safe Rust core for CPU-first long-context attention with a bounded resident KV-cache footprint.
+> A safe Rust library for running **exact causal attention** over long contexts while bounding resident K/V-cache memory through deterministic page regeneration.
 
-Instead of keeping every K/V row resident in memory, CFR-Atlas treats the KV cache as a virtual structure. Hot pages can stay in a bounded cache; cold pages are regenerated deterministically into scratch buffers, consumed by an exact folded online-softmax attention pass, then wiped or reused. The algorithm trades CPU recomputation for lower resident memory while preserving the same attention result when the regenerator reproduces the baseline K/V rows exactly.
+CFR-Atlas treats historical K/V as a **virtual address space**, not as data that must stay resident forever. The runtime keeps selected pages in a byte-bounded hot cache, regenerates cold pages into reusable scratch buffers, and folds each page into online softmax attention. When the backend regenerates the same K/V rows as its conventional full-KV path, CFR-Atlas preserves the attention result while trading recomputation for lower resident K/V memory.
 
-## What this repository contains
+The core is safe Rust, forbids `unsafe_code`, denies undocumented public items, and has no runtime dependencies.
 
-- A backend-neutral CFR runtime: page scheduling, hot-cache residency, scratch buffers, folded attention, and runtime counters.
-- A deterministic `KvRegenerator` trait for exact K/V page replay.
-- A reference backend adapter crate that demonstrates token replay, MHA/MQA/GQA head mapping, RoPE/ALiBi positional policy, dtype policy, and stored-KV conformance checks.
-- Validation utilities for comparing CFR attention against a full-KV baseline at output and logit level.
-- Benchmark helpers for memory estimates, tuned page sizes, and reproducible example runs.
-- Release-readiness helpers for schema versioning, MSRV policy, dependency posture, and release metadata.
+## What CFR-Atlas is — and is not
 
-The codebase uses safe Rust only, forbids `unsafe_code`, denies missing public documentation, and currently has zero runtime dependencies in the main crate.
+CFR-Atlas owns K/V-page identity, bounded residency, exact folded attention, deterministic validation helpers, and runtime telemetry. It does **not** own model weights, tokenizer state, a transformer graph, a matmul implementation, or a lossy compression scheme.
 
-## Core guarantee
+| Concern | CFR-Atlas responsibility | Backend/runtime responsibility |
+|---|---|---|
+| K/V residency | Hot-page cache, scratch buffers, eviction, accounting | Cache budget selection and admission policy |
+| K/V truth | Consume pages through `KvRegenerator` | Replay exact K/V rows from model state |
+| Attention | Folded online-softmax reduction | Query production and output integration |
+| Model semantics | Validate topology, dtype and position policy | Preserve token history, RoPE/ALiBi, head mapping and rounding |
+| Performance | Expose safe tuning and telemetry surfaces | Select kernels, scheduling and deployment configuration |
 
-CFR-Atlas does not prune tokens, quantize K/V, merge context, or approximate attention. Its core contract is:
+## Core contract
+
+CFR-Atlas does not prune tokens, quantize K/V, merge context, or approximate attention. The contract is deliberately conditional and reviewable:
 
 ```text
 if regenerate(page_i) == baseline_kv(page_i) for every causal page,
-then CFR folded attention == full-KV baseline attention.
+then folded_attention(query, regenerated_pages) == full_kv_attention(query).
 ```
 
-The resident memory reduction comes from not storing every historical K/V page at once. Correctness depends on deterministic regeneration and a backend that can replay the exact K/V rows required for each page.
+Correctness therefore depends on the adapter. A production backend must replay the same token positions, head mapping, positional policy, storage rounding, and K/V rows as its conventional stored-KV path. Cache admission changes latency and residency only; it must not change attention semantics.
 
-## Build and test
+## Repository layout
+
+| Path | Purpose |
+|---|---|
+| `src/` | Dependency-light runtime, page/cache logic, folded attention, policies and validation types |
+| `crates/cfr-atlas-backend-ref/` | Deterministic reference adapter used to exercise production integration seams |
+| `tests/` | Exactness, cache invariants, topology, validation, performance-surface and stabilization tests |
+| `examples/` | Minimal CPU integration, reference adapter, long-context validation and benchmark helpers |
+| `docs/` | Architecture, adapter, math, claims, benchmark and release-facing guides |
+| `fuzz/` | Optional nightly `cargo-fuzz` target for configuration and page-validation paths |
+| `scripts/` | Release, supply-chain and fuzzing helpers |
+
+## Quick start
+
+CFR-Atlas targets Rust `1.75.0` or newer. The normal workspace has no external runtime dependencies.
 
 ```sh
-cargo fmt --all
+cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --release
 ```
 
-Run the examples:
+Run the deterministic examples:
 
 ```sh
 cargo run --release --example toy_cpu
-cargo run --release --example bench_cfr -- 65536 64 512
 cargo run --release --example reference_backend
-cargo run --release --example bench_matrix
 cargo run --release --example long_context_validation
-cargo run --release --example stabilization_report
+cargo run --release --example bench_cfr -- 65536 64 512
+cargo run --release --example bench_matrix
 ```
 
-A known-good deterministic benchmark run reports exact output equality and a 128x resident scratch-vs-baseline KV estimate for a 65,536-token context with `head_dim=64` and `page_tokens=512`:
-
-```text
-context_tokens=65536
-head_dim=64
-page_tokens=512
-baseline_kv_bytes=33554432
-cfr_scratch_bytes=262144
-estimated_memory_reduction=128.00x
-max_abs_diff=0e0
-```
-
-## Optional fuzzing
-
-The main workspace builds on stable Rust. The fuzz target uses `cargo-fuzz`, which requires nightly because libFuzzer uses sanitizer instrumentation.
-
-```sh
-rustup toolchain install nightly
-cargo install cargo-fuzz
-./scripts/run_config_fuzz.sh
-```
+For optional configuration fuzzing, install nightly Rust and `cargo-fuzz`, then run `./scripts/run_config_fuzz.sh`.
 
 ## Minimal integration
+
+An integration implements `KvRegenerator` for its model backend, configures the resident cache, and runs one exact attention request.
 
 ```rust
 use cfr_atlas::prelude::*;
 use std::ops::Range;
 
-struct MyBackend;
+struct Backend;
 
-impl KvRegenerator for MyBackend {
+impl KvRegenerator for Backend {
     fn regenerate_page(
         &self,
         key: PageKey,
@@ -84,97 +82,59 @@ impl KvRegenerator for MyBackend {
         k_out: &mut [f32],
         v_out: &mut [f32],
     ) -> Result<()> {
-        // Replay the backend's exact forward path for:
-        //   (key.layer, key.head, token_range)
-        // and write row-major [token][head_dim] K and V.
+        // Replay the backend's normal forward path for (layer, K/V head, range)
+        // and write exact row-major K[token][dim] and V[token][dim] values.
         let _ = (key, token_range, head_dim, k_out, v_out);
         Ok(())
     }
 }
 
-fn run(query: &[f32], context_tokens: usize) -> Result<Vec<f32>> {
+fn attend(query: &[f32], context_tokens: usize) -> Result<Vec<f32>> {
     let config = Config::builder(512, query.len())
         .hot_cache_bytes(256 << 20)
         .admit_regenerated_pages(true)
         .build()?;
 
-    let backend = MyBackend;
     let mut atlas = CfrAtlas::new(config)?;
     let mut output = vec![0.0; query.len()];
-
     atlas.attend_exact_with_policy(
-        &backend,
+        &Backend,
         &KeepRecent { recent_tokens: 2048 },
         AttentionRequest::new(0, 0, query, context_tokens),
         &mut output,
     )?;
-
     Ok(output)
 }
 ```
 
-## Repository layout
+See [`docs/ADAPTERS.md`](docs/ADAPTERS.md) for the adapter contract and conformance sequence.
 
-```text
-src/atlas.rs          runtime coordinator
-src/attention.rs      folded online-softmax attention
-src/cache.rs          bounded hot-page cache
-src/config.rs         runtime configuration
-src/conformance.rs    regenerated-page comparison helpers
-src/dtype.rs          deterministic storage and accumulator dtype policy
-src/kernel.rs         safe CPU dot-product kernel boundary
-src/layout.rs         checked layout math and buffer wiping helpers
-src/page.rs           page identity and token ranges
-src/pipeline.rs       double-buffered cold-page buffers
-src/policy.rs         residency policies and telemetry-aware admission
-src/position.rs       RoPE and ALiBi helpers
-src/regenerator.rs    K/V regeneration trait
-src/schema.rs         versioned config schema
-src/stabilization.rs  release-readiness metadata
-src/stats.rs          runtime counters
-src/token.rs          token ledger
-src/topology.rs       MHA/MQA/GQA head mapping
-src/tuning.rs         page-size tuning helpers
-src/validation.rs     long-context validation utilities
+## Validation and hardening
 
-crates/cfr-atlas-backend-ref/  reference backend adapter
-examples/                      runnable demos and benchmark helpers
-tests/                         exactness, invariants, validation and release checks
-fuzz/                          optional nightly fuzz target
-docs/                          architecture, math, adapter and release documentation
-scripts/                       fuzz, supply-chain and release helper scripts
-```
+The test suite covers deterministic output equality against a full-KV baseline, invalid configuration and non-finite input rejection, transactional cache and scratch behavior, MHA/MQA/GQA mapping, RoPE/ALiBi and dtype policy, long-context output/logit validation, and release-readiness invariants.
 
-## Validation coverage
+The hardening baseline includes checked layout arithmetic, finite-value validation before cache admission, transactional cache accounting, scratch/page wiping on relevant error paths, duplicate-field rejection in the versioned configuration schema, and optional fuzzing. See [`SECURITY.md`](SECURITY.md) for the security boundary and [`docs/CLAIMS.md`](docs/CLAIMS.md) for the conditions that make the exactness and resident-memory claims valid.
 
-The test suite covers:
+## Benchmarks
 
-- exact equality against deterministic full-KV baseline attention;
-- rejection of invalid configs, invalid ranges, non-finite inputs, and malformed schema data;
-- cache byte accounting, global and per-layer budgets, replacement behavior, and LRU invariants;
-- transactional behavior for folded attention, cache insertion, cold-page buffers, and validation outputs;
-- MHA/MQA/GQA topology mapping, RoPE/ALiBi checks, token ledger monotonicity, and dtype determinism;
-- long-context output/logit comparison and memory telemetry;
-- release-readiness checks for schema versioning, MSRV policy, dependency posture, and benchmark estimates.
+The included examples report deterministic resident-KV estimates and exercise the reference workload. They are **not** end-to-end LLM throughput claims. Reproducible runtime benchmark methodology, measured scope, raw data, and interpretation rules are documented in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
-## Security and hardening posture
+## Documentation map
 
-The current hardening baseline includes:
-
-- `unsafe_code = forbid`;
-- checked layout and byte-size math;
-- finite-value validation before hot-cache admission;
-- transactional cache accounting and replacement;
-- explicit buffer wiping on cache eviction, scratch reuse, validation failures, and backend error paths;
-- duplicate-field rejection in the versioned config schema;
-- release helper scripts for manifest/checksum generation and supply-chain checks.
-
-See `SECURITY.md`, `docs/ARCHITECTURE.md`, `docs/MATH.md`, `docs/ADAPTERS.md`, `docs/STABILIZATION.md`, and `docs/CLAIMS.md` for more detail.
+| Need | Start here |
+|---|---|
+| Understand the runtime and memory model | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| Implement a model adapter | [`docs/ADAPTERS.md`](docs/ADAPTERS.md) |
+| Review folded-softmax math | [`docs/MATH.md`](docs/MATH.md) |
+| Validate and falsify integration claims | [`docs/CLAIMS.md`](docs/CLAIMS.md) |
+| Reproduce benchmark and tuning results | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) |
+| Review release/stabilization posture | [`docs/STABILIZATION.md`](docs/STABILIZATION.md) |
+| Browse every guide by reader goal | [`docs/README.md`](docs/README.md) |
 
 ## Status
 
-CFR-Atlas is ready for release-candidate style testing and external review. The core is deterministic and heavily validated against the included reference backend, but a final stable `1.0.0` release should only be cut after integration with a real model backend and a frozen public API review.
+CFR-Atlas is a release-candidate-quality exact-attention core with a deterministic reference adapter. A stable deployment should still require conformance and long-context validation against the target model backend, its tokenizer/position policy, its storage dtype, and its serving loop.
 
 ## License
 
-Licensed under the MIT License. See `LICENSE` for details.
+MIT. See [LICENSE](https://github.com/Nixort/CFR-Atlas/blob/main/LICENSE).

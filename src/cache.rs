@@ -155,7 +155,7 @@ impl HotCache {
         self.entries.get(key).map(|page| page.tokens)
     }
 
-    /// Removes a resident page and wipes it through [`HotPage`]'s drop path.
+    /// Removes a resident page and wipes it through the internal page drop path.
     #[must_use]
     pub fn remove(&mut self, key: &PageKey) -> bool {
         self.remove_page(key).is_some()
