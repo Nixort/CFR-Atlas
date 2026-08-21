@@ -1,0 +1,12 @@
+scenario,run,elapsed_us,output_max_abs_diff,direct_python_max_abs_diff,hot_hits,cold_regenerations,hot_cache_bytes,hot_cache_pages
+direct_full_kv,0,0,0.000000418,0.000000418,0,0,262144,0
+cfr_cold,1,172,0.000000089,0.000000418,0,8,0,0
+cfr_cold,2,176,0.000000089,0.000000418,0,8,0,0
+cfr_cold,3,159,0.000000089,0.000000418,0,8,0,0
+cfr_cold,4,167,0.000000089,0.000000418,0,8,0,0
+cfr_cold,5,191,0.000000089,0.000000418,0,8,0,0
+cfr_hot_recent_page,1,161,0.000000089,0.000000418,1,7,32768,1
+cfr_hot_recent_page,2,166,0.000000089,0.000000418,1,7,32768,1
+cfr_hot_recent_page,3,174,0.000000089,0.000000418,1,7,32768,1
+cfr_hot_recent_page,4,160,0.000000089,0.000000418,1,7,32768,1
+cfr_hot_recent_page,5,160,0.000000089,0.000000418,1,7,32768,1

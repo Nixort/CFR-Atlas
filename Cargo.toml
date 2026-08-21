@@ -30,6 +30,10 @@ path = "src/lib.rs"
 name = "bench-cfr"
 path = "bench/bench_cfr.rs"
 
+[[bin]]
+name = "bench-transformers-cfr"
+path = "bench/bench_transformers_cfr.rs"
+
 [features]
 default = []
 

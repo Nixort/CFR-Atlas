@@ -118,7 +118,7 @@ The hardening baseline includes checked layout arithmetic, finite-value validati
 
 ## Benchmarks
 
-The included examples report deterministic resident-KV estimates and exercise the reference workload. They are **not** end-to-end LLM throughput claims. Reproducible runtime benchmark methodology, measured scope, raw data, and interpretation rules are documented in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+The included examples report deterministic resident-KV estimates and exercise the reference workload. They are **not** end-to-end LLM throughput claims. A model-backed Qwen2.5-0.5B page-replay and CFR conformance result, with raw data and an explicit non-end-to-end scope, is maintained in [`results/transformers_qwen2_5_0_5b_cfr.md`](results/transformers_qwen2_5_0_5b_cfr.md). Reproducible runtime benchmark methodology, measured scope, raw data, and interpretation rules are documented in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
 ## Documentation map
 

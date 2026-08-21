@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "scope": "real Qwen2.5-0.5B K/V page replay plus CFR one-layer/one-KV-head folded-attention bridge",
+  "model": "Qwen/Qwen2.5-0.5B",
+  "resolved_revision": "060db6499f32faf8b98477b0a26969ef7d8b9987",
+  "context_tokens": 512,
+  "page_tokens": 64,
+  "target": {
+    "layer": 0,
+    "kv_head": 0,
+    "query_head": 0,
+    "head_dim": 64
+  },
+  "transformers_wall_seconds": {
+    "full_prefill": {
+      "runs": 3,
+      "mean": 0.9588270836666667,
+      "median": 0.924716882,
+      "minimum": 0.867824791,
+      "maximum": 1.083939578
+    },
+    "page_replay": {
+      "runs": 3,
+      "mean": 3.3459020173333336,
+      "median": 3.374303347,
+      "minimum": 3.250836808,
+      "maximum": 3.412565897
+    }
+  },
+  "cfr_folded_attention_milliseconds": {
+    "cfr_cold": {
+      "runs": 5,
+      "mean": 0.173,
+      "median": 0.172,
+      "minimum": 0.159,
+      "maximum": 0.191
+    },
+    "cfr_hot_recent_page": {
+      "runs": 5,
+      "mean": 0.16419999999999998,
+      "median": 0.161,
+      "minimum": 0.16,
+      "maximum": 0.174
+    }
+  },
+  "page_replay_to_full_prefill_median_ratio": 3.6490123763091415,
+  "conformance": {
+    "declared_model_atol": 0.005,
+    "all_layers_k_max_abs_diff": 3.0517578125e-05,
+    "all_layers_v_max_abs_diff": 2.8371810913085938e-05,
+    "page_replay_final_logit_max_abs_diff": 0.0,
+    "incremental_cache_final_logit_max_abs_diff": 3.5762786865234375e-05,
+    "python_direct_attention_max_abs_diff": 4.18e-07,
+    "cfr_to_direct_attention_max_abs_diff": 4.18e-07
+  },
+  "selected_head_kv_memory": {
+    "full_kv_bytes": 262144,
+    "cfr_cold_resident_bytes": 0,
+    "cfr_hot_resident_bytes": 32768,
+    "cold_scratch_bytes": 32768,
+    "hot_scratch_bytes": 32768,
+    "full_to_cold_scratch_ratio": 8.0,
+    "full_to_hot_resident_ratio": 8.0,
+    "cold_regenerations": 8,
+    "hot_regenerations": 7,
+    "hot_hits": 1
+  }
+}

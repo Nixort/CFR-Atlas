@@ -40,6 +40,12 @@ The repository also contains a real local-Ollama integration report for `qwen2.5
 
 This report is deliberately **not** included in the CFR performance table. Public Ollama endpoints do not supply page-level K/V replay or a stored-K/V baseline, so they cannot produce the conformance and resident-memory evidence required for a CFR virtual-K/V result. The integration remains fail-closed; see [`OLLAMA.md`](OLLAMA.md) for that boundary.
 
+## Real Transformers conformance result
+
+[`results/transformers_qwen2_5_0_5b_cfr.md`](../results/transformers_qwen2_5_0_5b_cfr.md) is a model-backed conformance report for pinned Qwen2.5-0.5B weights and 512 public-corpus tokens. It independently replays every 64-token causal K/V page through Transformers, validates all-layer K/V and final-logit agreement under an explicit f32 tolerance, then passes one real layer/K/V-head stream into the public Rust CFR-Atlas folded-attention path. The report publishes both the actual model prefill/page-replay samples and the separate Rust cold/hot samples, chart and raw data.
+
+This establishes a real-model K/V boundary and exactness protocol. It does **not** claim full-model CFR serving latency: the first adapter regenerates pages with repeated complete causal-prefix forwards, and CFR currently consumes one selected real attention head rather than replacing every model attention call. Treat the stated 8x selected-head K/V bound as a controlled per-head residency result, not a whole-model memory reduction claim.
+
 ## Reproduction
 
 Build and validate before interpreting timings:

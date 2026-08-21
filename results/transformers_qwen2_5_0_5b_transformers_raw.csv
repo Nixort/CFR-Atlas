@@ -1,0 +1,7 @@
+mode,run,seconds,context_tokens,page_tokens
+full_prefill,1,1.083939578,512,64
+full_prefill,2,0.867824791,512,64
+full_prefill,3,0.924716882,512,64
+page_replay,1,3.374303347,512,64
+page_replay,2,3.250836808,512,64
+page_replay,3,3.412565897,512,64
