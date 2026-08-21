@@ -34,6 +34,12 @@ The first corpus-backed reference-workload report uses Tiny Shakespeare at conte
 
 This is evidence for the included deterministic reference workload only. It is not an end-to-end model, process-RSS or universal throughput claim.
 
+## Live Ollama public-API result
+
+The repository also contains a real local-Ollama integration report for `qwen2.5:0.5b`: [`results/ollama_qwen2_5_0_5b_public_api/README.md`](../results/ollama_qwen2_5_0_5b_public_api/README.md). It includes three raw generation samples, a model digest, runtime/environment record, derived JSON summary and chart. The measurements demonstrate that `cfr-atlas-ollama` can discover and invoke a real model through documented public endpoints.
+
+This report is deliberately **not** included in the CFR performance table. Public Ollama endpoints do not supply page-level K/V replay or a stored-K/V baseline, so they cannot produce the conformance and resident-memory evidence required for a CFR virtual-K/V result. The integration remains fail-closed; see [`OLLAMA.md`](OLLAMA.md) for that boundary.
+
 ## Reproduction
 
 Build and validate before interpreting timings:

@@ -1,0 +1,4 @@
+run,prompt_case,model,wall_ms,total_ms,load_ms,prompt_tokens,prompt_ms,prompt_tokens_per_second,generated_tokens,generation_ms,generated_tokens_per_second,response_characters
+1,measurement-1,qwen2.5:0.5b,6596.423,6590.663,1.275,1560,5512.818,282.977,42,1051.847,39.93,224
+2,measurement-2,qwen2.5:0.5b,6203.106,6197.662,0.663,1560,5453.732,286.043,30,718.492,41.754,153
+3,measurement-3,qwen2.5:0.5b,6751.945,6746.364,0.675,1560,5731.611,272.175,41,989.227,41.447,189

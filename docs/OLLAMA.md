@@ -29,6 +29,8 @@ The example lists local models, queries the first model's record, prints topolog
 
 The optional crate provides a dependency-free blocking transport for the standard local HTTP endpoint. An HTTPS proxy, remote endpoint, authentication layer, or test double should implement `OllamaTransport` and be supplied through `OllamaClient::with_transport`. Tests use this seam and do not require a running Ollama process.
 
+A recorded local integration run against the real `qwen2.5:0.5b` model is maintained in [`../results/ollama_qwen2_5_0_5b_public_api/README.md`](../results/ollama_qwen2_5_0_5b_public_api/README.md). It measures public non-streaming generation and validates the client’s discovery/generate/fail-closed paths; it does not establish exact K/V replay or CFR memory savings.
+
 ## Why this is not an adapter
 
 The core adapter contract requires a backend to replay the exact K/V rows for a requested `(layer, K/V head, token range)`, using the same token history, absolute positions, positional policy, head mapping, and storage rounding as the baseline path. It also requires output buffers to be fully overwritten on success. See [`ADAPTERS.md`](ADAPTERS.md) for the complete conformance sequence.

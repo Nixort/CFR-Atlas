@@ -130,8 +130,7 @@ impl StdHttpTransport {
 impl OllamaTransport for StdHttpTransport {
     fn send(&self, request: &OllamaRequest) -> Result<OllamaResponse> {
         let endpoint = HttpEndpoint::parse(&request.url)?;
-        let mut stream = TcpStream::connect_timeout(&endpoint.address, self.timeout)
-            .map_err(|error| OllamaError::Transport(error.to_string()))?;
+        let mut stream = endpoint.connect(self.timeout)?;
         stream
             .set_read_timeout(Some(self.timeout))
             .map_err(|error| OllamaError::Transport(error.to_string()))?;
@@ -165,7 +164,7 @@ impl OllamaTransport for StdHttpTransport {
 
 struct HttpEndpoint {
     host: String,
-    address: std::net::SocketAddr,
+    addresses: Vec<std::net::SocketAddr>,
     path: String,
 }
 
@@ -177,21 +176,38 @@ impl HttpEndpoint {
         let (authority, path) = rest
             .find('/')
             .map_or((rest, "/"), |index| (&rest[..index], &rest[index..]));
-        let address = authority
+        let addresses: Vec<_> = authority
             .to_socket_addrs()
             .map_err(|_| OllamaError::InvalidBaseUrl(url.to_owned()))?
-            .next()
-            .ok_or_else(|| OllamaError::InvalidBaseUrl(url.to_owned()))?;
+            .collect();
+        if addresses.is_empty() {
+            return Err(OllamaError::InvalidBaseUrl(url.to_owned()));
+        }
         Ok(Self {
             host: authority.to_owned(),
-            address,
+            addresses,
             path: path.to_owned(),
         })
+    }
+
+    fn connect(&self, timeout: Duration) -> Result<TcpStream> {
+        let mut last_error = None;
+        for address in &self.addresses {
+            match TcpStream::connect_timeout(address, timeout) {
+                Ok(stream) => return Ok(stream),
+                Err(error) => last_error = Some(error),
+            }
+        }
+        let message = last_error.map_or_else(
+            || "endpoint resolved without a reachable address".to_owned(),
+            |error| error.to_string(),
+        );
+        Err(OllamaError::Transport(message))
     }
 }
 
 fn parse_http_response(response: &str) -> Result<OllamaResponse> {
-    let (head, body) = response.split_once("\r\n\r\n").ok_or_else(|| {
+    let (head, raw_body) = response.split_once("\r\n\r\n").ok_or_else(|| {
         OllamaError::Decode("HTTP response is missing a header boundary".to_owned())
     })?;
     let status = head
@@ -200,10 +216,64 @@ fn parse_http_response(response: &str) -> Result<OllamaResponse> {
         .ok_or_else(|| OllamaError::Decode("HTTP response is missing a status".to_owned()))?
         .parse::<u16>()
         .map_err(|error| OllamaError::Decode(error.to_string()))?;
-    Ok(OllamaResponse {
-        status,
-        body: body.to_owned(),
+    let body = if is_chunked(head) {
+        decode_chunked_body(raw_body)?
+    } else {
+        raw_body.to_owned()
+    };
+    Ok(OllamaResponse { status, body })
+}
+
+fn is_chunked(head: &str) -> bool {
+    head.lines().any(|line| {
+        line.split_once(':').is_some_and(|(name, value)| {
+            name.eq_ignore_ascii_case("transfer-encoding")
+                && value
+                    .split(',')
+                    .any(|encoding| encoding.trim().eq_ignore_ascii_case("chunked"))
+        })
     })
+}
+
+fn decode_chunked_body(raw_body: &str) -> Result<String> {
+    let bytes = raw_body.as_bytes();
+    let mut position = 0;
+    let mut decoded = Vec::new();
+    loop {
+        let line_end = find_crlf(bytes, position).ok_or_else(|| {
+            OllamaError::Decode("chunked response is missing a chunk-size line ending".to_owned())
+        })?;
+        let size_text = std::str::from_utf8(&bytes[position..line_end])
+            .map_err(|error| OllamaError::Decode(error.to_string()))?;
+        let size_text = size_text.split(';').next().unwrap_or_default().trim();
+        let size = usize::from_str_radix(size_text, 16)
+            .map_err(|error| OllamaError::Decode(error.to_string()))?;
+        position = line_end + 2;
+        if size == 0 {
+            return String::from_utf8(decoded)
+                .map_err(|error| OllamaError::Decode(error.to_string()));
+        }
+        let chunk_end = position.checked_add(size).ok_or_else(|| {
+            OllamaError::Decode("chunked response size overflows address space".to_owned())
+        })?;
+        let terminator_end = chunk_end.checked_add(2).ok_or_else(|| {
+            OllamaError::Decode("chunked response terminator overflows address space".to_owned())
+        })?;
+        if terminator_end > bytes.len() || &bytes[chunk_end..terminator_end] != b"\r\n" {
+            return Err(OllamaError::Decode(
+                "chunked response has an incomplete chunk or invalid terminator".to_owned(),
+            ));
+        }
+        decoded.extend_from_slice(&bytes[position..chunk_end]);
+        position = terminator_end;
+    }
+}
+
+fn find_crlf(bytes: &[u8], start: usize) -> Option<usize> {
+    bytes[start..]
+        .windows(2)
+        .position(|window| window == b"\r\n")
+        .map(|offset| start + offset)
 }
 
 /// Model information reported by `GET /api/tags`.
@@ -412,16 +482,33 @@ impl<T: OllamaTransport> OllamaClient<T> {
     /// Retrieves model metadata and derives CFR-relevant topology fields.
     pub fn show_model(&self, model: impl Into<String>) -> Result<OllamaModelRecord> {
         let requested_model = model.into();
+        let summary = self.list_models()?.into_iter().find(|candidate| {
+            candidate.name == requested_model
+                || candidate.model.as_deref() == Some(requested_model.as_str())
+        });
         let response: ShowResponse =
             self.post_json("/api/show", &json!({ "model": requested_model }))?;
         let details = response.details;
+        let summary_details = summary.as_ref().map(|candidate| &candidate.details);
         Ok(OllamaModelRecord {
-            requested_model,
-            name: response.name,
-            digest: response.digest,
-            format: details.format.clone(),
-            family: details.family.clone(),
-            quantization_level: details.quantization_level.clone(),
+            requested_model: requested_model.clone(),
+            name: response.name.or(Some(requested_model)),
+            digest: response.digest.or_else(|| {
+                summary
+                    .as_ref()
+                    .and_then(|candidate| candidate.digest.clone())
+            }),
+            format: details
+                .format
+                .clone()
+                .or_else(|| summary_details.and_then(|candidate| candidate.format.clone())),
+            family: details
+                .family
+                .clone()
+                .or_else(|| summary_details.and_then(|candidate| candidate.family.clone())),
+            quantization_level: details.quantization_level.clone().or_else(|| {
+                summary_details.and_then(|candidate| candidate.quantization_level.clone())
+            }),
             capabilities: response.capabilities,
             topology: topology_from_info(&response.model_info),
             model_info: response.model_info.into_iter().collect(),
@@ -574,21 +661,31 @@ fn number_for(
 mod tests {
     use super::*;
     use std::cell::RefCell;
+    use std::collections::VecDeque;
 
     #[derive(Default)]
     struct MockTransport {
         requests: RefCell<Vec<OllamaRequest>>,
-        responses: RefCell<Vec<OllamaResponse>>,
+        responses: RefCell<VecDeque<OllamaResponse>>,
     }
 
     impl MockTransport {
         fn with_response(status: u16, body: &str) -> Self {
+            Self::with_responses(&[(status, body)])
+        }
+
+        fn with_responses(responses: &[(u16, &str)]) -> Self {
             Self {
                 requests: RefCell::new(Vec::new()),
-                responses: RefCell::new(vec![OllamaResponse {
-                    status,
-                    body: body.to_owned(),
-                }]),
+                responses: RefCell::new(
+                    responses
+                        .iter()
+                        .map(|(status, body)| OllamaResponse {
+                            status: *status,
+                            body: (*body).to_owned(),
+                        })
+                        .collect(),
+                ),
             }
         }
     }
@@ -598,9 +695,19 @@ mod tests {
             self.requests.borrow_mut().push(request.clone());
             self.responses
                 .borrow_mut()
-                .pop()
+                .pop_front()
                 .ok_or_else(|| OllamaError::Transport("mock has no queued response".to_owned()))
         }
+    }
+
+    #[test]
+    fn chunked_http_response_is_decoded_before_json_parsing() {
+        let response = parse_http_response(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n6\r\n{\"ok\":\r\n5\r\ntrue}\r\n0\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, r#"{"ok":true}"#);
     }
 
     #[test]
@@ -622,10 +729,16 @@ mod tests {
 
     #[test]
     fn show_model_derives_topology_but_refuses_exact_kv() {
-        let transport = MockTransport::with_response(
-            200,
-            r#"{"name":"llama3.2","digest":"sha256:abc","capabilities":["completion"],"details":{"format":"gguf","family":"llama","quantization_level":"Q4_K_M"},"model_info":{"general.architecture":"llama","llama.block_count":32,"llama.attention.head_count":32,"llama.attention.head_count_kv":8,"llama.context_length":131072,"llama.rope.dimension_count":128}}"#,
-        );
+        let transport = MockTransport::with_responses(&[
+            (
+                200,
+                r#"{"models":[{"name":"llama3.2","digest":"sha256:abc","details":{"format":"gguf","family":"llama","quantization_level":"Q4_K_M"}}]}"#,
+            ),
+            (
+                200,
+                r#"{"name":"llama3.2","capabilities":["completion"],"details":{"format":"gguf","family":"llama","quantization_level":"Q4_K_M"},"model_info":{"general.architecture":"llama","llama.block_count":32,"llama.attention.head_count":32,"llama.attention.head_count_kv":8,"llama.context_length":131072,"llama.rope.dimension_count":128}}"#,
+            ),
+        ]);
         let client = OllamaClient::with_transport("http://127.0.0.1:11434", transport).unwrap();
         let record = client.show_model("llama3.2").unwrap();
         assert_eq!(record.name.as_deref(), Some("llama3.2"));

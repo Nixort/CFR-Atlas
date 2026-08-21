@@ -1,0 +1,37 @@
+{
+  "base_url": "http://127.0.0.1:11434",
+  "benchmark": "ollama_public_api_generation",
+  "environment": {
+    "machine": "x86_64",
+    "platform": "Linux-6.18.38+-x86_64-with-glibc2.39",
+    "python": "3.12.3"
+  },
+  "exact_kv_status": "unavailable_through_public_api",
+  "interpretation": "This is an end-to-end measurement of documented Ollama public generation. It is not a CFR-Atlas virtual-K/V or exact-attention benchmark.",
+  "means": {
+    "generated_tokens_per_second": 41.044,
+    "generation_ms": 919.855,
+    "load_ms": 0.871,
+    "prompt_ms": 5566.054,
+    "prompt_tokens_per_second": 280.398,
+    "total_ms": 6511.563,
+    "wall_ms": 6517.158
+  },
+  "model": "qwen2.5:0.5b",
+  "model_identity": {
+    "digest": "a8b0c51577010a279d933d14c2a8ab4b268079d44c5c8830c0a93900f1827c67",
+    "family": "qwen2",
+    "format": "gguf",
+    "quantization_level": "Q4_K_M",
+    "size_bytes": 397821319
+  },
+  "prompt_policy": {
+    "num_ctx": 2048,
+    "num_predict": 64,
+    "prompt_tokens_observed": 1560,
+    "seed": 42,
+    "temperature": 0
+  },
+  "runs": 3,
+  "warmup_excluded": true
+}
